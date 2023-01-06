@@ -4,7 +4,7 @@
 
 
 {% block content%}
-<h1>Ajout Kvm</h1>
+<h1  class="text-center">Ajout Kvm</h1>
 <div id="error_display">
     {% if error0 %}
         <p>Name already Taken, plz chose an unique name for your vm </p>
@@ -29,6 +29,10 @@
         <tr>
             <td>cpu : </td>
             <td><input type="number" name="cpu" /></td>
+        </tr>
+        <tr>
+            <td>Date of Creation :</td>
+            <td><input type="datetime-local" name="datetime" value="{{ datetime_form }}"/></td>
         </tr>
         <tr>
             <td>os : </td>
