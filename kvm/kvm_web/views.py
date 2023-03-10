@@ -5,97 +5,73 @@ import sys
 import libvirt
 from .tasks import create_vm
 import datetime
+from celery.result import AsyncResult
+from celery import current_app
+import json
+
 
 # Create your views here.
 def index(request):
-    return render (request,'index.html')
+    return render(request, 'index.html')
+
 
 def ajoutKvm(request):
-    if request.method=='POST':
-        data= request.POST
+
+    if request.method == 'POST':  # Collecting data from our form
+        data = request.POST
         nameKvm = str(data.get('nameKvm'))
         memory = str(data.get('memory'))
         cpu = str(data.get('cpu'))
         os = str(data.get('os'))
+        date = str(data.get('datetime'))
+        date_to_typeDate = datetime.datetime.strptime(
+            date, '%Y-%m-%dT%H:%M:%S')
+        # used to calculate the diff with form date
+        datetime_now = datetime.datetime.now()
 
-        conn=libvirt.open("qemu:///system")
-        domains=conn.listAllDomains(0)
+        conn = libvirt.open("qemu:///system")
+        domains = conn.listAllDomains(0)
 
-        for domain in domains:
-            if(domain.name()==nameKvm):
-                errorExit0=True #VM NAME ALREADY EXIST 
-                return render(request,'ajout.html',{'error0':errorExit0})
+        for domain in domains:  # Checking IF unique VM
+            if (domain.name() == nameKvm):
+                errorExit0 = True  # VM NAME ALREADY EXIST
+                return render(request, 'ajout.html', {'error0': errorExit0})
+        if (date_to_typeDate < datetime_now):  # if date.now less than date form we proceed as usual
+            if (create_vm(name=nameKvm, memory=memory, cpu=cpu, os=os)):
+                return redirect('listeKvm')
+            else:
+                errorExit1 = True
+                return render(request, 'listeKvm.html', {"error1": errorExit1})
+        else:  # ELSE we schedule the task
+            print("we schedule the task")
+            if (create_vm.apply_async(args=(nameKvm, memory, cpu, os), eta=date_to_typeDate)):
+                return redirect('listeKvm')
+            else:
+                errorExit1 = True
+                return render(request, 'listeKvm.html', {"error1": errorExit1})
 
-        if(create_vm(name=nameKvm,memory=memory,cpu=cpu,os=os)):
-            return redirect('listeKvm')
-        else:
-            errorExit1=True
-            return render(request,'listeKvm.html',{"error1":errorExit1})
+     # Forwarding to Form for adding VM
     datetime_now = datetime.datetime.now()
-    datetime_form= datetime_now.strftime("%Y-%m-%dT%H:%M:%S") #forwarding datetime.now() to form 
+    # forwarding datetime.now() to form
+    datetime_form = datetime_now.strftime("%Y-%m-%dT%H:%M:%S")
     print(datetime_form)
-    return render(request,'ajout.html',{'datetime_form':datetime_form}) # Render Form of VM
-        
+    # Render Form of VM
+    return render(request, 'ajout.html', {'datetime_form': datetime_form})
 
-
-#        xmlConf=''' <domain type='kvm'>
-#                     <name>'''+nameKvm+'''</name>
-#	                 <uuid>'''+str(uuid.uuid4())+'''</uuid>
-#	                 <memory unit='KiB'>'''+memory+'''</memory>
-#	                <vcpu>'''+cpu+'''</vcpu>
-#	                <os>
-#	            	<type arch='x86_64' machine='pc'>hvm</type>
-# 		            <boot dev='hd'/>
-# 		            <boot dev='cdrom'/>
-#	                 </os>
-#	                <clock offset='utc'/>
-#	                <on_poweroff>destroy</on_poweroff>
-#	                <on_reboot>restart</on_reboot>
-#	                <on_crash>destroy</on_crash>
-#	                <devices>
-#	                  <emulator>/usr/bin/qemu-system-x86_64</emulator>
-#	                 <disk type='file' device='disk'>
-#	                  <source file='/var/lib/libvirt/images/demo.qcow2'/>
-#	                 <driver name='qemu' type='raw'/>
-#	                <target dev='hda'/>
-#	                 </disk>
-#	                    <disk type='file' device='cdrom'>
-#  		            <source file='/home/estell/isoFiles/ubuntu-22.04-desktop-amd64.iso'/>
-#  		            <target dev='hdc' bus='ide'/>
-#		            </disk>
-#	                <interface type='network'>
-#	                 <source network='default'/>
-#	                </interface>
-#	                <input type='mouse' bus='ps2'/>
-#	                 <graphics type='vnc' port='-1' listen='127.0.0.1'/>
-#	                </devices>
-#	                </domain> '''
-        #
-#        try:
-#            dom=conn.defineXMLFlags(xmlConf,0)
-#            dom.create()
-#        except libvirt.libvirtError as e :
-#            print(repr(e), file=sys.stderr)
-#            errorExit1=True
-#            return render(request,'listeKvm.html',{"error1":errorExit1})
-#
-#       return redirect('listeKvm')
-    
-    
 
 def listeKvm(request):
-    conn=libvirt.open("qemu:///system")
-    domains = conn.listAllDomains(0) #If a value of 0 is specified then all domains will be listed.
-    arrayName=[]
-    arrayState=[]
-    
-    
+    conn = libvirt.open("qemu:///system")
+    # If a value of 0 is specified then all domains will be listed.
+    domains = conn.listAllDomains(0)
+    arrayName = []
+    arrayState = []
+
     for domain in domains:
-        
+
         arrayName.append(domain.name())
-        arrayState.append(domain.state()) # return array of ['state','reason']
-        
-    arrayStateFiltred=[]
+        arrayState.append(domain.state())  # return array of ['state','reason']
+
+    arrayStateFiltred = []
     for state in arrayState:
         if state[0] == libvirt.VIR_DOMAIN_RUNNING:
             arrayStateFiltred.append("RUNNING")
@@ -109,43 +85,64 @@ def listeKvm(request):
             arrayStateFiltred.append("UNKOWN")
 
     zippedList = zip(arrayName, arrayStateFiltred)
-    for item in arrayStateFiltred:	
+    for item in arrayStateFiltred:
         print(item)
-    return render(request,'listeKvm.html',{"list":zippedList})
+    # Get List of scheduled tasks
+    inspector = current_app.control.inspect()
+    scheduled_tasks = inspector.scheduled('kvm')
+    scheduled_tasks_param = []
+    print(scheduled_tasks)
+    for worker_name, tasks in scheduled_tasks.items():  # retreiving scheduled tasks
+        for task in tasks:
+            task_id = task['request']['id']
+            task_name = task['request']['name']
+            task_args = task['request']['args']
+            task_kwargs = task['request']['kwargs']
+            task_eta = task['eta']
+            task = AsyncResult(task_id)  # for task state
+            scheduled_tasks_param.append(
+                {'name': task_name, 'args': task_args, 'kwargs': task_kwargs, 'eta': task_eta, 'status': task.state})
+
+    return render(request, 'listeKvm.html', {"list": zippedList, 'scheduled_tasks': scheduled_tasks_param})
 
 
-def start(request,name):
-    conn=libvirt.open("qemu:///system")
-    dom=conn.lookupByName(name)
+def start(request, name):
+    conn = libvirt.open("qemu:///system")
+    dom = conn.lookupByName(name)
     dom.create()
     return redirect('listeKvm')
 
-def resume(requet,name):
-    conn=libvirt.open("qemu:///system")
-    dom=conn.lookupByName(name)
+
+def resume(requet, name):
+    conn = libvirt.open("qemu:///system")
+    dom = conn.lookupByName(name)
     dom.resume()
     return redirect('listeKvm')
 
-def pause(request,name):
-    conn=libvirt.open("qemu:///system")
-    dom=conn.lookupByName(name)
-    
+
+def pause(request, name):
+    conn = libvirt.open("qemu:///system")
+    dom = conn.lookupByName(name)
+
     return redirect('listeKvm')
 
-def shutdown(request,name):
-    conn=libvirt.open("qemu:///system")
-    dom=conn.lookupByName(name)
+
+def shutdown(request, name):
+    conn = libvirt.open("qemu:///system")
+    dom = conn.lookupByName(name)
     dom.shutdown()
     return redirect('listeKvm')
 
-def delete(request,name):
-    conn=libvirt.open("qemu:///system")
-    dom=conn.lookupByName(name)
+
+def delete(request, name):
+    conn = libvirt.open("qemu:///system")
+    dom = conn.lookupByName(name)
     dom.undefine()
     return redirect('listeKvm')
 
-def destroy(request,name):
-    conn=libvirt.open("qemu:///system")
-    dom=conn.lookupByName(name)
+
+def destroy(request, name):
+    conn = libvirt.open("qemu:///system")
+    dom = conn.lookupByName(name)
     dom.destroy()
     return redirect('listeKvm')

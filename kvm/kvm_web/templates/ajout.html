@@ -4,49 +4,51 @@
 
 
 {% block content%}
-<h1  class="text-center">Ajout Kvm</h1>
+<h1 class="text-center">Ajout Kvm</h1>
 <div id="error_display">
     {% if error0 %}
-        <p>Name already Taken, plz chose an unique name for your vm </p>
+    <p>Name already Taken, plz chose an unique name for your vm </p>
     {% endif %}
     {% if error1 %}
     <p>An unexpected error encountered plz try again </p>
-{% endif %}
+    {% endif %}
 </div>
-<div id="add_form">
+<div id="add_form" class="form-group"  class="col-xs-1" align="center">
     <form action="" method="post">
         {% csrf_token %}
-    <table>
-        <tr>
-            <td> name : </td>
-            <td> <input type="text" name="nameKvm"/></td>
-        </tr>
-        
-        <tr>
-            <td> memory :(Kibytes) </td>
-            <td><input type="number" name="memory"/></td>
-        </tr>
-        <tr>
-            <td>cpu : </td>
-            <td><input type="number" name="cpu" /></td>
-        </tr>
-        <tr>
-            <td>Date of Creation :</td>
-            <td><input type="datetime-local" name="datetime" value="{{ datetime_form }}"/></td>
-        </tr>
-        <tr>
-            <td>os : </td>
-            <td>
-                <select name="os">
-                    <option value="ubuntu">ubuntu</option>
-                    <option value="fedora">fedora</option>
-                    <option value="windows">windows</option>
-                </select>
-            </td>
-        </tr>
-        <tr><input type="submit" value="send"/></tr>
-    </table>
-    
-</form>
+        <table>
+            <tr>
+                <td> name : </td>
+                <td> <input type="text" class="form-control" name="nameKvm" /></td>
+            </tr>
+
+            <tr>
+                <td> memory :(Kibytes) </td>
+                <td><input type="number" class="form-control" name="memory" /></td>
+            </tr>
+            <tr>
+                <td>cpu : </td>
+                <td><input type="number" class="form-control" name="cpu" /></td>
+            </tr>
+            <tr>
+                <td>Date of Creation :</td>
+                <td><input type="datetime-local" class="form-control" name="datetime" max="2024-06-30T16:30"
+                        value="{{ datetime_form }}" />
+                </td>
+            </tr>
+            <tr>
+                <td>os : </td>
+                <td>
+                    <select name="os" class="form-control">
+                        <option value="ubuntu">ubuntu</option>
+                        <option value="fedora">fedora</option>
+                        <option value="windows">windows</option>
+                    </select>
+                </td>
+            </tr>
+            <tr><input type="submit" class="btn btn-primary" value="send" /></tr>
+        </table>
+
+    </form>
 </div>
 {% endblock %}
